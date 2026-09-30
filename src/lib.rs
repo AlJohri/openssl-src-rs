@@ -655,9 +655,10 @@ impl Build {
 
             let mut build = self.cmd_make()?;
             build.arg("build_libs").current_dir(&inner_dir);
-            // The default MODULESDIR is under the prefix, which is the build directory.
+            // Both default to directories under the prefix, which is the build directory.
             if !target.contains("windows") {
                 build.arg("MODULESDIR=/usr/local/lib/ossl-modules");
+                build.arg("ENGINESDIR=/usr/local/lib/engines-3");
             }
             if !cfg!(windows) {
                 if let Some(s) = env::var_os("CARGO_MAKEFLAGS") {
