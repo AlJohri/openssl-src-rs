@@ -708,11 +708,19 @@ impl Build {
             }
 
             build.env("SOURCE_DATE_EPOCH", &source_date_epoch);
+            // Apple's ar and ranlib record each member's mtime unless this is set.
+            if target.contains("apple") {
+                build.env("ZERO_AR_DATE", "1");
+            }
 
             self.run_command(build, "building OpenSSL")?;
 
             let mut install = self.cmd_make()?;
             install.arg("install_dev").current_dir(&inner_dir);
+            // install_dev runs ranlib again on the installed archives.
+            if target.contains("apple") {
+                install.env("ZERO_AR_DATE", "1");
+            }
             self.run_command(install, "installing OpenSSL")?;
         }
 
