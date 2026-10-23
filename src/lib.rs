@@ -672,30 +672,32 @@ impl Build {
             install.arg("install_dev").current_dir(&inner_dir);
             self.run_command(install, "installing OpenSSL")?;
         } else {
+            // GNU make reads GNUmakefile in preference to Makefile, including in
+            // the recursive `$(MAKE)` calls that `build_libs` makes.
+            let mut gnumakefile = String::from("include Makefile\n");
+            // Not via Configure, whose flags are embedded in libcrypto. A
+            // make-time CPPFLAGS is not, because CPPFLAGS_Q is fixed by Configure.
+            if let Some(ref flag) = prefix_map {
+                gnumakefile.push_str(&format!("CPPFLAGS += {flag}\n"));
+            }
+            // The default MODULESDIR is under the prefix, which is the build
+            // directory. Scoped to objects so installdata.pm, and with it the
+            // pkg-config and CMake files, keeps the install dir.
+            if !target.contains("windows") {
+                gnumakefile.push_str("%.o: MODULESDIR = /usr/local/lib/ossl-modules\n");
+            }
+            let path = inner_dir.join("GNUmakefile");
+            fs::write(&path, gnumakefile).map_err(|e| format!("{}: {e}", path.display()))?;
+
             let mut depend = self.cmd_make()?;
-            depend
-                .arg("depend")
-                .arg("build_generated")
-                .current_dir(&inner_dir);
+            depend.arg("depend").current_dir(&inner_dir);
             self.run_command(depend, "building OpenSSL dependencies")?;
 
             let mut build = self.cmd_make()?;
             build.arg("build_libs").current_dir(&inner_dir);
-            // The default MODULESDIR is under the prefix, which is the build directory.
-            if !target.contains("windows") {
-                build.arg("MODULESDIR=/usr/local/lib/ossl-modules");
-            }
             if !cfg!(windows) {
                 if let Some(s) = env::var_os("CARGO_MAKEFLAGS") {
                     build.env("MAKEFLAGS", s);
-                }
-            }
-
-            // Not via Configure, whose flags are embedded in libcrypto.
-            if let Some(ref flag) = prefix_map {
-                let makefile = fs::read_to_string(inner_dir.join("Makefile")).unwrap_or_default();
-                if let Some(cppflags) = makefile.lines().find_map(|l| l.strip_prefix("CPPFLAGS=")) {
-                    build.arg(format!("CPPFLAGS={cppflags} {flag}"));
                 }
             }
 
